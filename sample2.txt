@@ -1,0 +1,7 @@
+This is a test file for concurrent multiple clients.
+We are testing the TCP server's ability to handle multiple connections simultaneously.
+Computer networks are fascinating, and socket programming is a fundamental skill.
+Client 2 is sending this data to verify thread safety and concurrency handling.
+Let's see if the server can reverse this text without any data corruption.
+1234567890!@#$%^&*()_+
+End of sample2 file.

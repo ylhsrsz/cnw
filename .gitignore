@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs
+.vscode/
+.idea/
+.trae/
+
+# Logs and outputs
+run_log_*.txt
+reversed_output.txt
+udp_received_output.txt
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Archives
+*.zip
+*.tar.gz
+*.rar

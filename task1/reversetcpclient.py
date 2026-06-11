@@ -118,7 +118,8 @@ def run_client(
                 f"recv reverseAnswer #{chunk.index}, "
                 f"bytes={chunk.start}-{chunk.end - 1}, payload_len={len(payload)}"
             )
-            print(payload.decode("ascii", errors="replace"))
+            # Print to stdout in the specific format required by the assignment
+            print(f"{chunk.index}:{payload.decode('ascii', errors='replace')}", flush=True)
             responses[chunk.index] = payload
 
         # A trailing empty request cleanly marks the end of the stream.

@@ -4,6 +4,7 @@ import random
 import socket
 import struct
 import time
+import pandas as pd
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -104,10 +105,13 @@ def send_reliable(
     chunks: list[Chunk],
     timeout_ms: int,
     logger: Logger,
-) -> None:
+) -> tuple[int, list[float]]:
     base_index = 0
     next_index = 0
     sent_at: dict[int, float] = {}
+    
+    total_transmissions = 0
+    rtt_list: list[float] = []
 
     while base_index < len(chunks):
         while next_index < len(chunks):
@@ -116,7 +120,9 @@ def send_reliable(
             if window_size + candidate.size > WINDOW_BYTES:
                 break
             sock.sendto(packet_for_chunk(candidate), server)
+            total_transmissions += 1
             sent_at[candidate.seq] = time.perf_counter()
+            print(f"第 {candidate.seq} 个（第 {candidate.start}~{candidate.end - 1} 字节）client端已经发送")
             logger.log(
                 f"send DATA #{candidate.seq}, bytes={candidate.start}-{candidate.end - 1}, "
                 f"payload_len={candidate.size}"
@@ -135,6 +141,7 @@ def send_reliable(
             for index in range(base_index, next_index):
                 chunk = chunks[index]
                 sock.sendto(packet_for_chunk(chunk), server)
+                total_transmissions += 1
                 sent_at[chunk.seq] = time.perf_counter()
                 print(f"重传第 {chunk.seq} 个（第 {chunk.start}~{chunk.end - 1} 字节）数据包")
                 logger.log(
@@ -155,6 +162,7 @@ def send_reliable(
 
         acked_chunk = chunks[ack_seq - 1]
         rtt_ms = (time.perf_counter() - sent_at[ack_seq]) * 1000
+        rtt_list.append(rtt_ms)
         print(
             f"第 {ack_seq} 个（第 {acked_chunk.start}~{acked_chunk.end - 1} 字节）"
             f" server 端已经收到，RTT 是 {rtt_ms:.1f} ms，server 时间 {server_clock.decode('ascii')}"
@@ -164,6 +172,8 @@ def send_reliable(
             f"server_clock={server_clock.decode('ascii')}, rtt_ms={rtt_ms:.3f}"
         )
         base_index = ack_seq
+        
+    return total_transmissions, rtt_list
 
 
 def run_client(
@@ -204,7 +214,7 @@ def run_client(
             raise RuntimeError("connection establishment failed")
         logger.log(f"recv CONNECT_ACK, server_clock={server_clock.decode('ascii')}")
 
-        send_reliable(sock, server, chunks, timeout_ms, logger)
+        total_transmissions, rtt_list = send_reliable(sock, server, chunks, timeout_ms, logger)
 
         fin_packet = FIN_STRUCT.pack(TYPE_FIN, len(payload))
         sock.send(fin_packet)
@@ -217,6 +227,20 @@ def run_client(
             raise RuntimeError("server did not return FIN_ACK")
         logger.log(f"recv FIN_ACK, server_saved_bytes={actual_size}")
 
+        print("\n【汇总】信息：")
+        loss_rate = 1.0 - (len(chunks) / total_transmissions) if total_transmissions > 0 else 0.0
+        print(f"-丢包率：{loss_rate * 100:.2f}%。按“{len(chunks)}÷实际发送的udppacketnumber({total_transmissions})”计算。")
+        
+        if rtt_list:
+            df = pd.DataFrame(rtt_list, columns=['RTT'])
+            max_rtt = df['RTT'].max()
+            min_rtt = df['RTT'].min()
+            avg_rtt = df['RTT'].mean()
+            std_rtt = df['RTT'].std() if len(rtt_list) > 1 else 0.0
+            print(f"-整个过程中的最大RTT：{max_rtt:.2f} ms")
+            print(f"-整个过程中的最小RTT：{min_rtt:.2f} ms")
+            print(f"-整个过程中的平均RTT：{avg_rtt:.2f} ms")
+            print(f"-整个过程中的RTT标准差：{std_rtt:.2f} ms")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Task2 reliable UDP client")
